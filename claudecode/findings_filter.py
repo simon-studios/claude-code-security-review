@@ -21,6 +21,7 @@ class FilterStats:
     total_findings: int = 0
     hard_excluded: int = 0
     claude_excluded: int = 0
+    claude_api_failures: int = 0
     kept_findings: int = 0
     exclusion_breakdown: Dict[str, int] = field(default_factory=dict)
     confidence_scores: List[float] = field(default_factory=list)
@@ -305,6 +306,7 @@ class FindingsFilter:
                         stats.kept_findings += 1
                 else:
                     # Claude API call failed for this finding - keep it with warning
+                    stats.claude_api_failures += 1
                     logger.warning(f"Claude API call failed for finding {orig_idx}: {error_msg}")
                     enriched_finding = finding.copy()
                     enriched_finding['_filter_metadata'] = {
@@ -313,6 +315,22 @@ class FindingsFilter:
                     }
                     findings_after_claude.append(enriched_finding)
                     stats.kept_findings += 1
+            # A PARTIAL transient failure is a degraded-but-real filter pass, and the
+            # count reported below makes it visible. A TOTAL one is not: if every single
+            # finding fell back, the filter produced no verdict at all, and emitting that
+            # as a normal result is exactly the state ClaudeFilteringUnavailableError's
+            # docstring says must never happen — output indistinguishable from output the
+            # filter actually passed.
+            #
+            # A persistent 429/529/timeout reaches HERE rather than the configuration path,
+            # deliberately: those are transient, and failing a whole security job on a blip
+            # would be worse than the disease. But "nothing was filtered" is not a blip.
+            if stats.claude_api_failures and stats.claude_api_failures == len(findings_after_hard):
+                raise ClaudeFilteringUnavailableError(
+                    f"Claude false-positive filtering produced no verdicts: all "
+                    f"{stats.claude_api_failures} finding(s) failed against model "
+                    f"'{self.claude_client.model}'. Findings are UNFILTERED.")
+
         else:
             # Claude filtering disabled or no client - keep all findings from hard filter
             for orig_idx, finding in findings_after_hard:
@@ -340,6 +358,11 @@ class FindingsFilter:
                 "excluded_findings": len(all_excluded),
                 "hard_excluded": stats.hard_excluded,
                 "claude_excluded": stats.claude_excluded,
+                # Findings the Claude filter could not reach a verdict on (transient API
+                # failures) and which were therefore KEPT unjudged. Non-zero means the
+                # result is partially unfiltered — surfaced so a consumer can tell that
+                # apart from a clean pass instead of having to assume.
+                "claude_api_failures": stats.claude_api_failures,
                 "exclusion_breakdown": stats.exclusion_breakdown,
                 "average_confidence": sum(stats.confidence_scores) / len(stats.confidence_scores) if stats.confidence_scores else None,
                 "runtime_seconds": stats.runtime_seconds
@@ -347,6 +370,7 @@ class FindingsFilter:
         }
         
         logger.info(f"Filtering completed: {stats.kept_findings}/{stats.total_findings} findings kept "
-                    f"({stats.runtime_seconds:.1f}s)")
+                    f"({stats.runtime_seconds:.1f}s); "
+                    f"{stats.claude_api_failures} finding(s) unjudged after API failures")
         
         return True, filtered_results, stats
