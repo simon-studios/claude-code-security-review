@@ -18,9 +18,11 @@ from claudecode.claude_api_client import (
 from claudecode.findings_filter import FindingsFilter
 
 
+# A placeholder id, not a real retired one: test_no_retired_model_ids.py scans the whole
+# tree, and a literal retired id here would be a (correct) hit on a test fixture.
 NOT_FOUND = (
     "Error code: 404 - {'type': 'error', 'error': {'type': 'not_found_error', "
-    "'message': 'model: claude-3-5-haiku-20241022'}}"
+    "'message': 'model: claude-some-retired-model-00000000'}}"
 )
 RATE_LIMITED = (
     "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', "
