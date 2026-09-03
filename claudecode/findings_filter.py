@@ -5,7 +5,10 @@ from typing import Dict, Any, List, Tuple, Optional, Pattern
 import time
 from dataclasses import dataclass, field
 
-from claudecode.claude_api_client import ClaudeAPIClient
+from claudecode.claude_api_client import (
+    ClaudeAPIClient,
+    ClaudeFilteringUnavailableError,
+)
 from claudecode.constants import DEFAULT_CLAUDE_MODEL
 from claudecode.logger import get_logger
 
@@ -184,15 +187,21 @@ class FindingsFilter:
                     model=model,
                     api_key=api_key
                 )
-                # Validate API access
-                valid, error = self.claude_client.validate_api_access()
-                if not valid:
-                    logger.warning(f"Claude API validation failed: {error}")
-                    self.claude_client = None
-                    self.use_claude_filtering = False
+                # NO fixed-model probe here. The removed code called
+                # validate_api_access(), which hard-coded a model id of its own; once that
+                # id was retired the probe failed on every run, this branch set
+                # use_claude_filtering = False, and every scan afterwards reported
+                # hard-rules-only output exactly as if the Claude filter had passed it.
+                # The filter's own first real call now surfaces any problem, against the
+                # CONFIGURED model, and a configuration-class failure raises rather than
+                # silently disabling filtering.
+            except ClaudeFilteringUnavailableError:
+                raise
             except Exception as e:
-                logger.error(f"Failed to initialize Claude client: {str(e)}")
-                self.use_claude_filtering = False
+                raise ClaudeFilteringUnavailableError(
+                    f"Failed to initialize Claude client for false-positive "
+                    f"filtering: {str(e)}"
+                ) from e
     
     def filter_findings(self, 
                        findings: List[Dict[str, Any]],
