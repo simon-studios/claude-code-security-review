@@ -5,6 +5,9 @@ pinned in code keeps working right up to its retirement date and then fails, and
 the failure is caught and swallowed (as the false-positive filter's startup probe was)
 nothing visible changes. A test that only checked the one id already fixed would not
 have caught that id before it broke, and will not catch the next one.
+
+Consumers scanning a whole fleet: this file is exempt (model-id-sweep:allow-whole-file)
+— naming retired ids is its job.
 """
 
 import subprocess

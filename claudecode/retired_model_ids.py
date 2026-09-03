@@ -7,6 +7,9 @@ rediscovered from a bill (see test_no_retired_model_ids.py).
 
 Add an id here on the day it retires. Removing one is never correct — retirements do
 not un-happen.
+
+Consumers scanning a whole fleet: this file is exempt (model-id-sweep:allow-whole-file)
+— naming retired ids is its job.
 """
 
 # Past their published retirement date (as of 2026-09-03).
